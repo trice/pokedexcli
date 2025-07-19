@@ -1,4 +1,4 @@
-package internal
+package pokecache
 
 import (
 	"sync"
@@ -10,18 +10,18 @@ type cacheEntry struct {
 	val []byte
 }
 
-type cache struct {
+type Cache struct {
 	mux *sync.Mutex
 	items map[string]cacheEntry
 }
 
-func (c cache) Add(key string, val []byte)  {
+func (c Cache) Add(key string, val []byte)  {
 	c.mux.Lock()
 	c.items[key] = cacheEntry{ time.Now(), val }
 	c.mux.Unlock()
 }
 
-func (c cache) reapLoop(interval time.Duration)  {
+func (c Cache) reapLoop(interval time.Duration)  {
 	ticker := time.NewTicker(interval)
 	for {
 		t := <-ticker.C
@@ -35,7 +35,7 @@ func (c cache) reapLoop(interval time.Duration)  {
 	}
 }
 
-func (c cache) Get(key string) ([]byte, bool) {
+func (c Cache) Get(key string) ([]byte, bool) {
 	c.mux.Lock()
 	v, ok := c.items[key]
 	c.mux.Unlock()
@@ -46,9 +46,9 @@ func (c cache) Get(key string) ([]byte, bool) {
 	return nil, false
 }
 
-func NewCache(interval time.Duration) cache {
+func NewCache(interval time.Duration) Cache {
 	theMux := sync.Mutex{}
-	theCache := cache{ &theMux, make(map[string]cacheEntry) }
+	theCache := Cache{ &theMux, make(map[string]cacheEntry) }
 	go theCache.reapLoop(interval)
 	return theCache
 }
