@@ -22,6 +22,7 @@ type cliCommand struct {
 type commandConfig struct {
 	Next string
 	Previous *string
+    CmdArgs []string
 }
 
 type queryResponse struct {
@@ -32,6 +33,59 @@ type queryResponse struct {
 		Name string `json:"name"`
 		URL  string `json:"url"`
 	} `json:"results"`
+}
+
+type exploreResponse struct {
+	EncounterMethodRates []struct {
+		EncounterMethod struct {
+			Name string `json:"name"`
+			URL  string `json:"url"`
+		} `json:"encounter_method"`
+		VersionDetails []struct {
+			Rate    int `json:"rate"`
+			Version struct {
+				Name string `json:"name"`
+				URL  string `json:"url"`
+			} `json:"version"`
+		} `json:"version_details"`
+	} `json:"encounter_method_rates"`
+	GameIndex int `json:"game_index"`
+	ID        int `json:"id"`
+	Location  struct {
+		Name string `json:"name"`
+		URL  string `json:"url"`
+	} `json:"location"`
+	Name  string `json:"name"`
+	Names []struct {
+		Language struct {
+			Name string `json:"name"`
+			URL  string `json:"url"`
+		} `json:"language"`
+		Name string `json:"name"`
+	} `json:"names"`
+	PokemonEncounters []struct {
+		Pokemon struct {
+			Name string `json:"name"`
+			URL  string `json:"url"`
+		} `json:"pokemon"`
+		VersionDetails []struct {
+			EncounterDetails []struct {
+				Chance          int   `json:"chance"`
+				ConditionValues []any `json:"condition_values"`
+				MaxLevel        int   `json:"max_level"`
+				Method          struct {
+					Name string `json:"name"`
+					URL  string `json:"url"`
+				} `json:"method"`
+				MinLevel int `json:"min_level"`
+			} `json:"encounter_details"`
+			MaxChance int `json:"max_chance"`
+			Version   struct {
+				Name string `json:"name"`
+				URL  string `json:"url"`
+			} `json:"version"`
+		} `json:"version_details"`
+	} `json:"pokemon_encounters"`
 }
 
 func getCommands() map[string]cliCommand {
@@ -57,13 +111,18 @@ func getCommands() map[string]cliCommand {
 			description: "Displays 20 previous location areas in the Pokemon world",
 			callback: commandMapBack,
 		},
+        "explore": {
+            name: "explore",
+            description: "Explore a specified location to learn the Pokemon found there",
+            callback: commandExplore,
+        },
 	}
 }
 
 func makeApiCall(apiUrl string, c *pokecache.Cache) (queryResponse, error) {
 	response := queryResponse{}
 	tmp := []byte{}
-	
+
 	if cr, ok := c.Get(apiUrl); ok {
 		tmp = cr
 	} else {
@@ -82,6 +141,28 @@ func makeApiCall(apiUrl string, c *pokecache.Cache) (queryResponse, error) {
 	err := json.Unmarshal(tmp, &response)
 	if err != nil {
 		return queryResponse{}, err
+	}
+
+	return response, nil
+}
+
+func makeExploreApiCall(apiUrl string) (exploreResponse, error) {
+	response := exploreResponse{}
+	bodyBytes := []byte{}
+
+	if cr, err1 := http.Get(apiUrl); err1 == nil {
+        bbl, err2 := io.ReadAll(cr.Body)
+        if err2 != nil {
+            return exploreResponse{}, err2
+        }
+        bodyBytes = bbl
+	} else {
+	    return exploreResponse{}, err1
+	}
+
+	err := json.Unmarshal(bodyBytes, &response)
+	if err != nil {
+		return exploreResponse{}, err
 	}
 
 	return response, nil
@@ -139,6 +220,27 @@ func commandExit(arg *commandConfig, c *pokecache.Cache) error {
 	return nil
 }
 
+func commandExplore(arg *commandConfig, c *pokecache.Cache) error  {
+    // assume area of exploration is the first CmdArgs because it's slice of inputs
+    areaOfExploration := arg.CmdArgs[0]
+
+    if len(areaOfExploration) == 0 {
+       return fmt.Errorf("no area provided for exploration")
+    }
+
+    apiUrl := fmt.Sprintf("https://pokeapi.co/api/v2/location-area/%s/", areaOfExploration)
+
+    response, err := makeExploreApiCall(apiUrl)
+    if err != nil {
+       return err
+    } else {
+       for _, pokemon := range response.PokemonEncounters {
+            fmt.Println(pokemon.Pokemon.Name)
+        }
+    }
+    return nil
+}
+
 func cleanInput(text string) []string {
 	if len(text) == 0 {
 		return []string{}
@@ -153,7 +255,7 @@ func cleanInput(text string) []string {
 }
 
 func main()  {
-	cmdCfg := commandConfig { "https://pokeapi.co/api/v2/location-area/", nil }
+	cmdCfg := commandConfig { "https://pokeapi.co/api/v2/location-area/", nil, nil }
 	theCache := pokecache.NewCache(5 * time.Second)
 	scanner := bufio.NewScanner(os.Stdin)
 	for {
@@ -161,6 +263,9 @@ func main()  {
 		scanner.Scan()
 		words := cleanInput(scanner.Text())
 		if cmd, ok := getCommands()[words[0]]; ok {
+            if len(words) > 1 {
+                cmdCfg.CmdArgs = words[1:]
+            }
 			err := cmd.callback(&cmdCfg, &theCache)
 			if err != nil {
 				fmt.Println(err)
