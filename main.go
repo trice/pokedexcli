@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 	"time"
+    "math/rand"
 
 	"github.com/trice/pokedexcli/internal/pokecache"
 )
@@ -23,6 +24,7 @@ type commandConfig struct {
 	Next string
 	Previous *string
     CmdArgs []string
+    CapturedPokemon *map[string]pokemonExperience
 }
 
 type queryResponse struct {
@@ -88,8 +90,12 @@ type exploreResponse struct {
 	} `json:"pokemon_encounters"`
 }
 
-func getCommands() map[string]cliCommand {
+type pokemonExperience struct {
+    Name string `json:"name"`
+    Base_Experience int `json:"base_experience"`
+}
 
+func getCommands() map[string]cliCommand {
 	return map[string]cliCommand{
 		"exit": {
 			name:        "exit",
@@ -115,6 +121,11 @@ func getCommands() map[string]cliCommand {
             name: "explore",
             description: "Explore a specified location to learn the Pokemon found there",
             callback: commandExplore,
+        },
+        "catch": {
+            name: "catch",
+            description: "Catch a specified Pokemon",
+            callback: commandCatch,
         },
 	}
 }
@@ -163,6 +174,28 @@ func makeExploreApiCall(apiUrl string) (exploreResponse, error) {
 	err := json.Unmarshal(bodyBytes, &response)
 	if err != nil {
 		return exploreResponse{}, err
+	}
+
+	return response, nil
+}
+
+func makeCatchApiCall(apiUrl string) (pokemonExperience, error) {
+    response := pokemonExperience{}
+    bodyBytes := []byte{}
+
+	if cr, err1 := http.Get(apiUrl); err1 == nil {
+        bbl, err2 := io.ReadAll(cr.Body)
+        if err2 != nil {
+            return pokemonExperience{}, err2
+        }
+        bodyBytes = bbl
+	} else {
+	    return pokemonExperience{}, err1
+	}
+
+    err := json.Unmarshal(bodyBytes, &response)
+	if err != nil {
+		return pokemonExperience{}, err
 	}
 
 	return response, nil
@@ -241,6 +274,34 @@ func commandExplore(arg *commandConfig, c *pokecache.Cache) error  {
     return nil
 }
 
+func commandCatch(arg *commandConfig, c *pokecache.Cache) error {
+    apiUrl := fmt.Sprintf("https://pokeapi.co/api/v2/pokemon/%s/", arg.CmdArgs[0])
+
+    response, err := makeCatchApiCall(apiUrl)
+    if err != nil {
+        return err
+    }
+
+    fmt.Printf("Throwing a Pokeball at %s...\n", response.Name)
+
+    if response.Base_Experience < 100 {
+        if (rand.Intn(99)+1) >= (100 - response.Base_Experience) {
+            fmt.Printf("%s was caught!\n", response.Name)
+            (*arg.CapturedPokemon)[response.Name] = response
+        } else {
+            fmt.Printf("%s escaped\n", response.Name)
+        }
+    } else if response.Base_Experience >= 100 {
+        if (rand.Intn(99)+1) >= (100 - (response.Base_Experience-100)) {
+            fmt.Printf("%s was caught!\n", response.Name)
+            (*arg.CapturedPokemon)[response.Name] = response
+        } else {
+            fmt.Printf("%s escaped\n", response.Name)
+        }
+    }
+    return nil
+}
+
 func cleanInput(text string) []string {
 	if len(text) == 0 {
 		return []string{}
@@ -255,9 +316,14 @@ func cleanInput(text string) []string {
 }
 
 func main()  {
-	cmdCfg := commandConfig { "https://pokeapi.co/api/v2/location-area/", nil, nil }
+	cmdCfg := commandConfig { "https://pokeapi.co/api/v2/location-area/", nil, nil, nil }
+
 	theCache := pokecache.NewCache(5 * time.Second)
 	scanner := bufio.NewScanner(os.Stdin)
+
+    capturedPokemon := map[string]pokemonExperience{}
+    cmdCfg.CapturedPokemon = &capturedPokemon
+
 	for {
 		fmt.Print("Pokedex > ")
 		scanner.Scan()
