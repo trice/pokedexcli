@@ -93,6 +93,23 @@ type exploreResponse struct {
 type pokemonExperience struct {
     Name string `json:"name"`
     Base_Experience int `json:"base_experience"`
+	Height    int `json:"height"`
+	Weight int `json:"weight"`
+	Stats []struct {
+		BaseStat int `json:"base_stat"`
+		Effort   int `json:"effort"`
+		Stat     struct {
+			Name string `json:"name"`
+			URL  string `json:"url"`
+		} `json:"stat"`
+	} `json:"stats"`
+	Types []struct {
+		Slot int `json:"slot"`
+		Type struct {
+			Name string `json:"name"`
+			URL  string `json:"url"`
+		} `json:"type"`
+	} `json:"types"`
 }
 
 func getCommands() map[string]cliCommand {
@@ -126,6 +143,11 @@ func getCommands() map[string]cliCommand {
             name: "catch",
             description: "Catch a specified Pokemon",
             callback: commandCatch,
+        },
+        "inspect": {
+            name: "inspect",
+            description: "Inspect a caught Pokemon",
+            callback: commandInspect,
         },
 	}
 }
@@ -302,6 +324,28 @@ func commandCatch(arg *commandConfig, c *pokecache.Cache) error {
     return nil
 }
 
+func commandInspect(arg *commandConfig, c *pokecache.Cache) error {
+    pokemon, exists := (*arg.CapturedPokemon)[arg.CmdArgs[0]]
+    if !exists {
+        fmt.Printf("%s not found\n", arg.CmdArgs[0])
+        return nil
+    }
+
+    fmt.Printf("Name: %s\n", pokemon.Name)
+    fmt.Printf("Height: %v\n", pokemon.Height)
+    fmt.Printf("Weight: %v\n", pokemon.Weight)
+    fmt.Println("Stats:")
+    for _, stat := range pokemon.Stats {
+        fmt.Printf("  -%s: %v\n", stat.Stat.Name, stat.BaseStat)
+    }
+    fmt.Println("Types:")
+    for _, t := range pokemon.Types {
+        fmt.Printf("  -%s\n", t.Type.Name)
+    }
+
+    return nil
+}
+
 func cleanInput(text string) []string {
 	if len(text) == 0 {
 		return []string{}
@@ -341,3 +385,4 @@ func main()  {
 		}
 	}
 }
+
