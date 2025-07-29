@@ -149,6 +149,11 @@ func getCommands() map[string]cliCommand {
             description: "Inspect a caught Pokemon",
             callback: commandInspect,
         },
+        "pokedex": {
+            name: "pokedex",
+            description: "List all caught Pokemon",
+            callback: commandPokedex,
+        },
 	}
 }
 
@@ -343,6 +348,14 @@ func commandInspect(arg *commandConfig, c *pokecache.Cache) error {
         fmt.Printf("  -%s\n", t.Type.Name)
     }
 
+    return nil
+}
+
+func commandPokedex(arg *commandConfig, c *pokecache.Cache) error {
+    fmt.Println("Your Pokedex:")
+    for _, pm := range *arg.CapturedPokemon {
+        fmt.Printf(" -%s\n", pm.Name)
+    }
     return nil
 }
 
